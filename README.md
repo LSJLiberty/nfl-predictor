@@ -63,8 +63,8 @@ Then open the notebooks in VS Code and select the `.venv` kernel. Run the cells 
 ## Roadmap
 
 - [x] Week 1: Load and explore the data
-- [ ] Week 2: Feature engineering and train/test split
-- [ ] Week 3: Train a baseline model (logistic regression) and compare it to the home-win baseline
+- [x] Week 2: Feature engineering and train/test split
+- [x] Week 3: Train a baseline model (logistic regression) and compare it to the home-win baseline
 - [ ] Improve features and try other models
 - [ ] Save the trained model
 - [ ] Build the FastAPI prediction endpoint
