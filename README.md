@@ -100,8 +100,8 @@ Then open the notebooks in VS Code and select the `.venv` kernel. Run the cells 
 - [x] Week 2: Rolling-form features and a time-based train/test split
 - [x] Week 3: Baseline logistic regression model
 - [x] Week 4: Elo ratings, relocated-team fix, and validation-based feature comparison
-- [ ] Move the feature and Elo code into a reusable Python module
-- [ ] Load the current season's completed games so ratings stay up to date
+- [x] Week 5: Move the feature and Elo code into a reusable Python module
+- [x] Week 5: Load the current season's completed games so ratings stay up to date
 - [ ] Build a FastAPI endpoint that returns win probabilities for an upcoming game
 - [ ] Build the React front end
 
