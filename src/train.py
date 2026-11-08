@@ -45,7 +45,13 @@ def main():
         "team_form": current_team_form(played),
         "trained_through": str(played["gameday"].max().date()),
         "n_games": len(table),
+        # NEW in week 6: the schedule of games still to be played, saved inside the
+        # bundle so the API can answer "what's coming up?" without re-downloading data.
+        "upcoming": upcoming[
+            ["gameday", "home_team", "away_team", "home_rest", "away_rest"]
+        ].reset_index(drop=True),
     }
+    
     os.makedirs("models", exist_ok=True)
     joblib.dump(bundle, MODEL_PATH)
     print(f"Saved {MODEL_PATH} (trained through {bundle['trained_through']})")
