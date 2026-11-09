@@ -1,0 +1,162 @@
+/* App.css: styles for the NFL predictor page. */
+
+/* ---- Colors live in variables so light and dark mode only change them here ---- */
+:root {
+  --bg: #f4f6fa;
+  --card: #ffffff;
+  --text: #1b2330;
+  --muted: #5d6b82;
+  --border: #dde3ee;
+  --away: #e07a1f;     /* orange segment of the bar */
+  --home: #2563eb;     /* blue segment of the bar */
+  --error: #b42318;
+  --accent: #2563eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f141c;
+    --card: #1a212d;
+    --text: #e8edf5;
+    --muted: #93a1b8;
+    --border: #2c3647;
+    --error: #ff8a80;
+    --accent: #5b8def;
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ---- Layout ---- */
+.page {
+  max-width: 760px;
+  margin: 0 auto;      /* centers the column */
+  padding: 24px 16px 48px;
+}
+
+h1 { margin: 0 0 4px; font-size: 1.8rem; }
+h2 { margin: 0 0 16px; font-size: 1.15rem; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+.error { color: var(--error); font-weight: 600; }
+
+code {
+  background: var(--border);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* ---- Matchup picker ---- */
+.matchup {
+  display: flex;
+  align-items: flex-end;   /* line the swap button up with the dropdowns */
+  gap: 12px;
+  flex-wrap: wrap;         /* stack on narrow phone screens */
+  margin-bottom: 16px;
+}
+
+.matchup label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 200px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+select {
+  padding: 10px;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+}
+
+button {
+  font-size: 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.swap {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+}
+
+.primary {
+  padding: 10px 24px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---- Result ---- */
+.result {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.pick { font-size: 1.2rem; margin: 0 0 12px; }
+
+/* ---- Probability bar (used by the result and the upcoming list) ---- */
+.prob-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.prob-labels .favored { color: var(--text); font-weight: 600; }
+
+.prob-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;   /* clips the colored boxes to the rounded corners */
+  background: var(--border);
+}
+
+.prob-away { background: var(--away); }
+.prob-home { background: var(--home); }
+
+/* ---- Upcoming games list ---- */
+.games {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.game { padding: 12px 0; border-top: 1px solid var(--border); }
+.game:first-child { border-top: none; padding-top: 0; }
+
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+footer { margin-top: 28px; text-align: center; }
