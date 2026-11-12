@@ -1,11 +1,10 @@
-# Import libraries pandas and nflreadpy
 import nflreadpy as nfl
 import pandas as pd
 
 # Old abbreviations -> current ones, so a relocated team keeps one history.
 TEAM_FIX = {"OAK": "LV", "SD": "LAC", "STL": "LA"}
 
-# Define a function load_games, which takes two optional parameters first_season and last_season, with default values of 2015 and 2026 respectively.
+
 def load_games(first_season=2015, last_season=2026):
     """Download every game from first_season through last_season (inclusive)."""
     games = nfl.load_schedules(seasons=range(first_season, last_season + 1)).to_pandas()

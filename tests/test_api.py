@@ -78,3 +78,25 @@ def test_upcoming_returns_requested_number_of_games(client):
     response = client.get("/upcoming", params={"n": 5})
     assert response.status_code == 200
     assert len(response.json()) == 5
+
+def test_predict_explains_its_pick(client):
+    body = client.get("/predict", params={"home_team": "KC", "away_team": "BUF"}).json()
+    assert [f["name"] for f in body["factors"]] == [
+        "Home-field advantage", "Team strength (Elo)", "Recent form", "Rest",
+    ]
+    total = sum(f["points"] for f in body["factors"])
+    assert abs(total - (body["home_win_prob"] * 100 - 50)) < 0.3
+
+
+def test_upcoming_games_stay_lightweight(client):
+    games = client.get("/upcoming", params={"n": 2}).json()
+    assert all("factors" not in game for game in games)
+
+
+def test_scorecard_reports_a_backtest_and_calibration(client):
+    card = client.get("/scorecard").json()
+    summary = card["backtest"]["summary"]
+    assert summary["games"] > 500
+    assert summary["accuracy_low"] < summary["accuracy"] < summary["accuracy_high"]
+    assert summary["accuracy"] > summary["home_pick_baseline"]
+    assert len(card["backtest"]["calibration"]) == 6

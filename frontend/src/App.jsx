@@ -7,8 +7,11 @@
 // and React automatically re-draws whatever depends on it.
 
 import { useEffect, useState } from "react";
-import { getHealth, getPrediction, getTeams, getUpcoming } from "./api";
+import { getHealth, getPrediction, getScorecard, getTeams, getUpcoming } from "./api";
+import Factors from "./components/Factors";
 import ProbabilityBar from "./components/ProbabilityBar";
+import Rankings from "./components/Rankings";
+import Scorecard from "./components/Scorecard";
 import UpcomingGames from "./components/UpcomingGames";
 import { teamName } from "./teamNames";
 import "./App.css";
@@ -23,6 +26,7 @@ export default function App() {
   const [teams, setTeams] = useState([]);          // list of teams for the dropdowns
   const [upcoming, setUpcoming] = useState([]);    // predictions for upcoming games
   const [health, setHealth] = useState(null);      // model info (trained-through date)
+  const [scorecard, setScorecard] = useState(null);  // the accuracy report (may be missing)
   const [pageLoading, setPageLoading] = useState(true);
   const [pageError, setPageError] = useState("");  // problem loading the page's data
 
@@ -38,17 +42,16 @@ export default function App() {
   // useEffect runs code AFTER the component is drawn. The empty list [] at the end
   // means "run this only once, not on every redraw".
   useEffect(() => {
-    // Promise.all sends all three requests at the same time and waits for all of
+    // Promise.all sends all the requests at the same time and waits for all of
     // them, which is faster than asking one after another.
-    Promise.all([getHealth(), getTeams(), getUpcoming()])
-      .then(([healthData, teamData, upcomingData]) => {
+    // The scorecard is a bonus: if it fails, `.catch(() => null)` turns the failure
+    // into "no scorecard" so the rest of the page still works.
+    Promise.all([getHealth(), getTeams(), getUpcoming(), getScorecard().catch(() => null)])
+      .then(([healthData, teamData, upcomingData, scorecardData]) => {
         setHealth(healthData);
-        // The API sends teams strongest-first. For a dropdown, alphabetical is
-        // friendlier. [...teamData] copies the list so we don't modify the original.
-        setTeams(
-          [...teamData].sort((a, b) => teamName(a.team).localeCompare(teamName(b.team)))
-        );
+        setTeams(teamData); // strongest first, exactly as the API sends them
         setUpcoming(upcomingData);
+        setScorecard(scorecardData);
       })
       .catch((error) => setPageError(error.message))
       .finally(() => setPageLoading(false)); // runs whether it worked or failed
@@ -97,6 +100,9 @@ export default function App() {
   // Values calculated from the state
   // ---------------------------------------------------------------------------
   // These aren't stored in state because we can always work them out from it.
+  // The API sends teams strongest-first (good for rankings). Dropdowns are friendlier
+  // alphabetical, so we sort a COPY ([...teams]) and leave the original order alone.
+  const teamOptions = [...teams].sort((a, b) => teamName(a.team).localeCompare(teamName(b.team)));
   const sameTeam = home !== "" && home === away;
   const canPredict = home !== "" && away !== "" && !sameTeam && !predicting;
 
@@ -107,7 +113,16 @@ export default function App() {
   // Anything in {curly braces} is a JavaScript expression.
 
   if (pageLoading) {
-    return <main className="page"><p className="muted">Loading…</p></main>;
+    // On a free hosting plan the server falls asleep when nobody uses it, and the
+    // first request wakes it up. That can take up to a minute, so we say so.
+    return (
+      <main className="page">
+        <p className="muted">Loading…</p>
+        <p className="muted small">
+          The server may take up to a minute to wake up if it hasn&rsquo;t been used recently.
+        </p>
+      </main>
+    );
   }
 
   if (pageError) {
@@ -148,7 +163,7 @@ export default function App() {
             Away team
             <select value={away} onChange={handleAwayChange}>
               <option value="">Choose a team…</option>
-              {teams.map((t) => (
+              {teamOptions.map((t) => (
                 <option key={t.team} value={t.team}>
                   {teamName(t.team)}
                 </option>
@@ -164,7 +179,7 @@ export default function App() {
             Home team
             <select value={home} onChange={handleHomeChange}>
               <option value="">Choose a team…</option>
-              {teams.map((t) => (
+              {teamOptions.map((t) => (
                 <option key={t.team} value={t.team}>
                   {teamName(t.team)}
                 </option>
@@ -195,6 +210,12 @@ export default function App() {
               homeProb={prediction.home_win_prob}
             />
             <p className="muted small">Assumes both teams had the same rest.</p>
+            {/* Why the model picked who it picked (reasons come from the API). */}
+            <Factors
+              factors={prediction.factors}
+              awayLabel={teamName(prediction.away_team)}
+              homeLabel={teamName(prediction.home_team)}
+            />
           </div>
         )}
       </section>
@@ -209,9 +230,24 @@ export default function App() {
         </p>
       </section>
 
+      <section className="card">
+        <h2>How accurate is the model?</h2>
+        <Scorecard scorecard={scorecard} />
+      </section>
+
+      <section className="card">
+        <h2>Power rankings</h2>
+        <p className="muted small">
+          Every team&rsquo;s Elo rating: a single strength number that rises with wins
+          (more for upsets and blowouts) and falls with losses.
+        </p>
+        <Rankings teams={teams} />
+      </section>
+
       <footer className="muted small">
         Predictions are statistical estimates from past game results only (no injuries,
-        weather, or news). For learning and fun, not betting advice.
+        weather, or news). For learning and fun, not betting advice.{" "}
+        <a href="https://github.com/LSJLiberty/nfl-predictor">Source code on GitHub</a>
       </footer>
     </main>
   );

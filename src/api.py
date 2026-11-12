@@ -4,6 +4,7 @@
 # Start it from the project root with:
 #     uvicorn src.api:app --reload
 
+import os
 from contextlib import asynccontextmanager  # helper used for the startup function below
 
 from fastapi import FastAPI, HTTPException, Query
@@ -31,8 +32,15 @@ async def lifespan(app):
     state.clear()
 
 
-# Create the app. `title` appears at the top of the automatic docs page.
-app = FastAPI(title="NFL Game Predictor", lifespan=lifespan)
+# Create the app. `title` and `description` appear at the top of the automatic docs page.
+app = FastAPI(
+    title="NFL Game Predictor",
+    description=(
+        "Win probabilities for NFL games from a logistic regression model fed by Elo "
+        "ratings and recent form. Statistical estimates for learning, not betting advice."
+    ),
+    lifespan=lifespan,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -41,17 +49,30 @@ app = FastAPI(title="NFL Game Predictor", lifespan=lifespan)
 
 # Browsers block a web page from calling a server on a different "origin"
 # (a different address or port) unless that server says it's allowed.
-# Your React dev server will run on port 5173 (or 3000), and this API runs on
+# Your React dev server runs on port 5173 (or 3000), and this API runs on
 # port 8000, so they count as different origins. This tells the browser that
 # requests from those React addresses are okay. (Python programs and tools like
 # curl don't enforce this rule; it's a browser safety feature.)
+#
+# Once the site is online, its address (for example
+# https://nfl-predictor-web.onrender.com) must be allowed too. We read extra
+# addresses from an environment variable, so the code doesn't change between your
+# laptop and the real server. Separate several addresses with commas.
+LOCAL_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+]
+# os.environ.get("NAME", "") reads a setting from the environment ("" if it isn't set).
+extra_origins = [
+    origin.strip().rstrip("/")  # tidy up spaces and a trailing slash
+    for origin in os.environ.get("ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()           # ignore empty pieces
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-    ],
+    allow_origins=LOCAL_ORIGINS + extra_origins,
     allow_methods=["GET"],   # this API only reads data, it never changes anything
     allow_headers=["*"],
 )
@@ -84,9 +105,75 @@ class Prediction(BaseModel):
     pick: str               # the team the model thinks is more likely to win
 
 
-class UpcomingGame(Prediction):
+class Factor(BaseModel):
+    name: str
+    points: float           # percentage points; positive favors the home team
+    detail: str             # one sentence with the numbers behind it
+
+
+class PredictionDetail(Prediction):
     # "(Prediction)" means: everything a Prediction has, plus the field below.
+    factors: list[Factor]   # why the model picked who it picked
+
+
+class UpcomingGame(Prediction):
     gameday: str
+
+
+# --- the accuracy report ("scorecard") ---
+
+class Summary(BaseModel):
+    games: int
+    correct: int
+    accuracy: float
+    accuracy_low: float     # the 95% interval around the accuracy
+    accuracy_high: float
+    home_pick_baseline: float
+    log_loss: float
+
+
+class CalibrationBin(BaseModel):
+    low: float
+    high: float
+    games: int
+    avg_predicted: float | None = None   # None when a bucket has no games
+    home_win_rate: float | None = None
+
+
+class WeekRow(BaseModel):
+    week: int
+    games: int
+    correct: int
+
+
+class RecentGame(BaseModel):
+    gameday: str
+    away_team: str
+    home_team: str
+    away_score: int
+    home_score: int
+    home_win_prob: float
+    pick: str
+    correct: bool
+
+
+class BacktestReport(BaseModel):
+    seasons: str
+    summary: Summary
+    calibration: list[CalibrationBin]
+
+
+class LiveReport(BaseModel):
+    season: int
+    summary: Summary
+    by_week: list[WeekRow]
+    recent: list[RecentGame]
+
+
+class Scorecard(BaseModel):
+    through: str
+    backtest: BacktestReport
+    live: LiveReport | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +198,7 @@ def health():
 @app.get("/teams", response_model=list[TeamInfo])
 def teams():
     """All 32 teams with their current Elo rating, strongest first.
-    The React app can use this to fill its team dropdowns."""
+    The React app uses this for its dropdowns and the power rankings."""
     ratings = state["bundle"]["ratings"]
     # sorted() with key=... sorts the (team, rating) pairs by the rating.
     # item[1] is the rating; reverse=True puts the highest first.
@@ -119,7 +206,7 @@ def teams():
     return [{"team": name, "elo": round(float(elo), 1)} for name, elo in ordered]
 
 
-@app.get("/predict", response_model=Prediction)
+@app.get("/predict", response_model=PredictionDetail)
 def predict(
     # These function parameters become "query parameters" in the URL, like:
     #   /predict?home_team=KC&away_team=BUF&rest_diff=0
@@ -133,7 +220,7 @@ def predict(
     rest_diff: int = Query(0, ge=-14, le=14,
                            description="Home rest days minus away rest days"),
 ):
-    """Win probability for one matchup, using the current ratings and form."""
+    """Win probability for one matchup, plus the reasons behind it."""
     # Let people type "kc" or "KC": team names in our data are uppercase.
     home = home_team.upper()
     away = away_team.upper()
@@ -144,7 +231,7 @@ def predict(
 
     try:
         # The real work happens in the function you wrote in week 5.
-        return predict_matchup(state["bundle"], home, away, rest_diff)
+        return predict_matchup(state["bundle"], home, away, rest_diff, with_factors=True)
     except ValueError as error:
         # predict_matchup raises ValueError for a team name it doesn't know.
         # We translate that into HTTP's "404 Not Found" and pass along its message.
@@ -170,3 +257,16 @@ def upcoming(
     # predict_upcoming gives a table; .to_dict("records") turns each row into a
     # dictionary, which FastAPI then sends back as a JSON list.
     return predict_upcoming(bundle, schedule, n=n).to_dict(orient="records")
+
+
+@app.get("/scorecard", response_model=Scorecard)
+def scorecard():
+    """How accurate the model has been: a backtest on past seasons, plus this
+    season's finished games predicted by a model that never saw them."""
+    report = state["bundle"].get("scorecard")
+    if report is None:
+        raise HTTPException(
+            status_code=503,
+            detail="The saved model has no scorecard. Run: python -m src.train",
+        )
+    return report

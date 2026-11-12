@@ -7,7 +7,9 @@
 // `import.meta.env` holds settings that Vite reads from the environment; if you
 // ever set VITE_API_URL (for example, when you deploy the API somewhere), it
 // overrides the default after the `??`.
-const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
+// `.replace(/\/+$/, "")` removes any slash(es) at the very end, so both
+// "https://example.com" and "https://example.com/" work.
+const API_URL = (import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000").replace(/\/+$/, "");
 
 // A shared helper that sends a GET request and returns the JSON reply.
 // `async` means this function does slow work (a network request) and returns a
@@ -40,6 +42,7 @@ async function request(path) {
 export const getHealth = () => request("/");
 export const getTeams = () => request("/teams");
 export const getUpcoming = (n = 16) => request(`/upcoming?n=${n}`);
+export const getScorecard = () => request("/scorecard");
 
 // encodeURIComponent makes a value safe to put inside a URL (spaces, symbols, etc.).
 export const getPrediction = (home, away) =>
