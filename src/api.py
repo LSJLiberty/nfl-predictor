@@ -12,7 +12,6 @@ from pydantic import BaseModel
 
 from src.predict import load_bundle, predict_matchup, predict_upcoming
 
-
 # ---------------------------------------------------------------------------
 # Startup: load the model once
 # ---------------------------------------------------------------------------

@@ -1,0 +1,4 @@
+# Everything in requirements.txt, plus what the Jupyter notebooks use.
+-r requirements.txt
+matplotlib
+ipykernel

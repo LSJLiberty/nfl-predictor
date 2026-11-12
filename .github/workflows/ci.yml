@@ -1,0 +1,77 @@
+# ci.yml -- "continuous integration": GitHub runs these checks automatically on every
+# push, so you find out within minutes if a change broke something.
+
+name: CI
+
+# WHEN to run: on every push to main, and on every pull request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A workflow is made of "jobs". These two run at the same time, each on its own
+# fresh Linux computer that GitHub lends you for a few minutes.
+jobs:
+  backend:
+    name: Python (train, API, tests)
+    runs-on: ubuntu-latest
+    steps:
+      # Download your repository's code onto the fresh computer.
+      - uses: actions/checkout@v7
+
+      # Install Python. The version comes from the .python-version file, so your
+      # laptop, this check, and the real server all agree. `cache: pip` saves
+      # downloaded packages between runs to make later runs faster.
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+          cache: pip
+
+      # Install the libraries listed in requirements.txt.
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Check the code for mistakes (unused imports, undefined names, unsorted imports).
+      # The rules live in ruff.toml.
+      - name: Lint
+        run: ruff check src tests
+
+      # Train a model the same way the real server will. This also proves the whole
+      # pipeline (download data -> features -> model) still works from scratch, and
+      # it creates models/latest.joblib, which the API tests need.
+      - name: Train the model
+        run: python -m src.train
+
+      # Run all the Python tests (features, Elo, and the API).
+      - name: Run tests
+        run: python -m pytest -q
+
+  frontend:
+    name: React (lint, tests, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend   # run every command below inside frontend/
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # `npm ci` installs exactly what package-lock.json says (unlike `npm install`,
+      # which may update the lock file). It's the right choice for automated runs.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      # Proves the production version of the site can be built.
+      - name: Build
+        run: npm run build

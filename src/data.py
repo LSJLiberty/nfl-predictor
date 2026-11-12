@@ -1,6 +1,6 @@
 # Import libraries pandas and nflreadpy
-import pandas as pd
 import nflreadpy as nfl
+import pandas as pd
 
 # Old abbreviations -> current ones, so a relocated team keeps one history.
 TEAM_FIX = {"OAK": "LV", "SD": "LAC", "STL": "LA"}

@@ -1,0 +1,31 @@
+# refresh.yml -- keeps the live site current. Every few days, after games have been
+# played, it tells Render to redeploy. Redeploying re-runs `python -m src.train`
+# (see the build command in Render), which downloads the newest results and
+# recalculates every team's Elo rating and recent form.
+
+name: Refresh live model
+
+on:
+  # Cron schedule: minute hour day-of-month month day-of-week, in UTC.
+  # "0 10 * * 2,5" = 10:00 UTC every Tuesday (after Monday night games) and Friday
+  # (after Thursday night games).
+  schedule:
+    - cron: "0 10 * * 2,5"
+  # Also adds a "Run workflow" button in the GitHub Actions tab, for manual refreshes.
+  workflow_dispatch:
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    steps:
+      # Render gives you a secret URL ("deploy hook"). Requesting it starts a deploy.
+      # We keep it in a GitHub "secret" so it never appears in your code.
+      - name: Trigger a Render deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "RENDER_DEPLOY_HOOK_URL secret is not set" >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error -X POST "$HOOK"
