@@ -1,28 +1,34 @@
 # NFL Game Predictor
 
-A machine learning project that predicts the winner of NFL games from historical results. The goal is a full pipeline: raw game data becomes features, features train a model, and the model is served through an API to a web interface.
+![CI](https://github.com/LSJLiberty/nfl-predictor/actions/workflows/ci.yml/badge.svg)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
-> **Status: in progress.** Data exploration, feature engineering, and model training are done. The prediction API and web interface are next.
+A full-stack machine learning app that predicts the winner of NFL games, explains *why*, and keeps score on its own accuracy. Python, scikit-learn, FastAPI, and React, with automated tests, CI, and a scheduled refresh that retrains on the newest results.
+
+**Live demo:** https://YOUR-SITE.onrender.com *(free hosting: the first load after a quiet period can take up to a minute while the server wakes up)*
+
+![Matchup picker with a prediction and the reasons behind it](docs/matchup.png)
+
+<details>
+<summary>See the full page (upcoming games, accuracy scorecard, power rankings)</summary>
+
+![Full page](docs/screenshot.png)
+
+</details>
 
 ## Results
 
-The model is trained on the 2015-2022 seasons and evaluated on the 2023-2025 seasons, which it never sees during training.
+Tested on 855 games from the 2023-2025 seasons, which the model never saw during training:
 
 | Model | Accuracy | Log loss |
 |---|---|---|
-| Always pick the home team | 0.549 | n/a |
+| Always pick the home team (baseline) | 0.549 | n/a |
 | Logistic regression, recent-form features | 0.630 | 0.639 |
-| Logistic regression, + Elo ratings | **0.653** | **0.629** |
+| **Logistic regression, + Elo ratings (final)** | **0.653** (95% interval 0.620-0.684) | **0.629** |
 
-By season, the final model beat the home-team pick rate every year:
+The 95% interval is the range the true accuracy plausibly lies in, given only 855 games. The whole interval sits above the baseline, so the improvement is not luck.
 
-| Season | Home-team pick rate | Model accuracy |
-|---|---|---|
-| 2023 | 0.565 | 0.632 |
-| 2024 | 0.547 | 0.677 |
-| 2025 | 0.533 | 0.649 |
-
-Feature sets were compared with walk-forward validation (train on all earlier seasons, check on the next one, for 2019-2022) so the 2023-2025 test seasons were held out for the final result:
+Features were chosen with **walk-forward validation** (train on all earlier seasons, check on the next one, for 2019-2022), so the test seasons were not used to pick anything:
 
 | Feature set | Accuracy | Log loss |
 |---|---|---|
@@ -32,86 +38,150 @@ Feature sets were compared with walk-forward validation (train on all earlier se
 | Elo rating only | 0.637 | 0.6399 |
 | All features | 0.645 | 0.6385 |
 
-**Takeaways:** Elo was the only addition that clearly helped. A single Elo number performs almost as well as all features together, because it accounts for opponent strength and remembers more than five games. Log loss measures the quality of the predicted probabilities, not just the picks, and lower is better.
+Elo was the only addition that clearly helped. A single Elo number nearly matches everything combined, because it accounts for opponent strength and remembers more than five games.
 
-## Tech Stack
+**The app tracks itself.** Its scorecard predicts the current season's finished games using a model trained only on *earlier* seasons, so those predictions are genuinely out of sample, and it shows a calibration table (when the model says "60-70%", how often does the home team win?). Calibration is reasonable in the middle of the range, and the model is somewhat overconfident about strong away teams. Exact numbers update after every retrain.
 
-- **Python** for data work and modeling
-- **pandas** and **NumPy** for data wrangling and math
-- **nflreadpy** for downloading NFL schedule and results data
-- **scikit-learn** for model training
-- **joblib** for saving trained models
-- **FastAPI** for the prediction API (planned)
-- **React** for the web interface (planned)
-- **Jupyter notebooks** for exploration and experiments
+## Features
 
-## How It Works
+- **Matchup picker:** choose any two teams and get win probabilities.
+- **Explanations:** each prediction is broken into four reasons (home field, team strength, recent form, rest), measured in percentage points and averaged over every ordering of the reasons (Shapley-style attribution), so the split is fair and adds up exactly.
+- **Upcoming games:** predictions for the next games on the schedule.
+- **Accuracy scorecard:** backtest with a confidence interval, current-season results, weekly accuracy, calibration, and recent picks marked right or wrong.
+- **Power rankings:** every team's current Elo rating.
+- **Always current:** each deploy retrains from the latest data, and a scheduled workflow redeploys every Tuesday and Friday.
 
-1. **Load data.** Every NFL game from the 2015-2025 seasons is downloaded with `nflreadpy`.
-2. **Clean team names.** Teams that relocated (Oakland to Las Vegas, San Diego to Los Angeles, St. Louis to Los Angeles) are mapped to one identity so their history is continuous.
-3. **Create the target.** `home_win` is `1` if the home team scored more than the away team, otherwise `0`.
-4. **Reshape.** The data is converted from one row per game to one row per team per game so each team's history can be followed in date order.
-5. **Rolling form features.** For each team in each game, averages over its previous five games: win rate, scoring margin, points scored, and points allowed.
-6. **Elo ratings.** Each team has a strength rating that updates after every game. Wins over strong opponents and larger margins move it more, and ratings are pulled partway back toward average each offseason.
-7. **Prevent data leakage.** Every feature uses only information known before kickoff. Rolling values are shifted by one game, and each Elo rating is recorded before it is updated.
-8. **Difference features.** Home minus away for each feature, so the model sees how the two teams compare.
-9. **Train and evaluate.** A logistic regression (with feature scaling) is trained on earlier seasons and scored on later ones. Splits are by time, never random, so the model is never trained on games that happen after the ones it is tested on.
+## How it works
 
-## Baseline
+```
+nflverse game data (2015-present)
+        |
+        v
+clean + reshape  ->  one row per team per game
+        |
+        v
+features (all known before kickoff)
+  - last-5-game win rate, margin, points scored, points allowed
+  - Elo rating (updated after every game, pulled toward average each offseason)
+  - rest-day difference
+  - each feature is home minus away
+        |
+        v
+StandardScaler -> logistic regression  ->  win probability + explanation
+```
 
-Always picking the home team wins about **55%** of games in the 2015-2025 data. A model is only useful if it beats this on held-out seasons.
+**Preventing data leakage.** Every feature uses only information available before kickoff: rolling averages are shifted by one game so a game never sees its own result, and each Elo rating is recorded *before* it is updated. Unit tests check both properties.
 
-## Project Structure
+**Honest evaluation.** Splits are always by time, never random. Feature choices used walk-forward validation, and the final test seasons were held out.
+
+## Architecture
+
+```
+React (Vite)  --HTTP/JSON-->  FastAPI  -->  saved model bundle
+ static site                  web service    (model + Elo ratings + recent form + scorecard)
+
+GitHub Actions: lint + tests on every push  |  scheduled refresh -> Render deploy hook
+Render: builds the API (installs, trains the model, starts uvicorn) and the static site
+```
+
+### API
+
+| Endpoint | Description |
+|---|---|
+| `GET /` | Health check and model freshness |
+| `GET /teams` | All 32 teams with Elo ratings, strongest first |
+| `GET /predict?home_team=KC&away_team=BUF` | Win probabilities plus the reasons behind them. Optional `rest_diff` (home minus away rest days) |
+| `GET /upcoming?n=16` | Predictions for the next unplayed games |
+| `GET /scorecard` | Backtest, current-season results, and calibration |
+
+Interactive documentation is generated at `/docs`. Invalid input returns clear errors (`400`, `404`, `422`).
+
+## Model card
+
+- **Intended use:** learning, demonstration, and casual interest. It is not betting advice, and nobody should rely on it for money decisions.
+- **Data:** public game results and schedules from [nflverse](https://github.com/nflverse), 2015 to the present, including playoff games.
+- **Model:** logistic regression with six standardized features. Chosen over more complex models because it matched them on this data, trains instantly, and is easy to explain.
+- **Known limits:**
+  - It sees only past results. Injuries, quarterback changes, weather, and news are invisible to it.
+  - About 65% accuracy is near what game results alone can support, and the test set is 855 games, so differences of a point or two between versions are within normal luck.
+  - Teams that relocated are merged into one identity, and Elo carries over across seasons with a pull toward average.
+  - Predictions for games several weeks away use today's ratings and are less reliable.
+
+## Project structure
 
 ```
 nfl-predictor/
-├── data/                          # local data files (if saved)
-├── models/                        # saved trained models
-├── notebooks/
-│   ├── 01_explore.ipynb           # load and explore the schedule data
-│   ├── 02_features.ipynb          # rolling-form features and train/test split
-│   ├── 03_model.ipynb             # baseline logistic regression model
-│   └── 04_better_features.ipynb   # team-name fix, Elo ratings, feature comparison
+├── src/
+│   ├── data.py          # download games, fix relocated-team names
+│   ├── features.py      # rolling form, Elo, feature table
+│   ├── model.py         # scaler + logistic regression pipeline
+│   ├── evaluate.py      # backtest, live-season scorecard, calibration, confidence interval
+│   ├── train.py         # train, evaluate, and save the model bundle
+│   ├── predict.py       # predictions and explanations
+│   └── api.py           # FastAPI server
+├── tests/               # pytest: features, Elo, scorecard math, explanations, API
+├── frontend/            # React + Vite app, with Vitest tests
+├── notebooks/           # exploration and the original experiments
+├── .github/workflows/   # CI and the scheduled refresh
 ├── requirements.txt
-└── README.md
+└── requirements-notebooks.txt
 ```
 
-## Setup (Windows / PowerShell)
+## Run it locally
 
 ```powershell
 git clone https://github.com/LSJLiberty/nfl-predictor.git
 cd nfl-predictor
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -r requirements.txt            # add requirements-notebooks.txt for the notebooks
+
+python -m src.train                        # download data, evaluate, save models/latest.joblib
+uvicorn src.api:app --reload               # API at http://127.0.0.1:8000  (docs at /docs)
 ```
 
-If PowerShell blocks the activation script, allow local scripts for your user and try again:
+In a second terminal:
 
 ```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+cd frontend
+npm install
+npm run dev                                # site at http://localhost:5173
 ```
 
-Then open the notebooks in VS Code and select the `.venv` kernel. Run the cells in each notebook from top to bottom, and run the notebooks in numerical order.
+### Tests and checks
 
-## Roadmap
+```powershell
+python -m pytest -q          # Python tests
+ruff check src tests         # lint
+cd frontend
+npm test                     # React tests
+npm run lint
+npm run build
+```
 
-- [x] Week 1: Load and explore the data
-- [x] Week 2: Rolling-form features and a time-based train/test split
-- [x] Week 3: Baseline logistic regression model
-- [x] Week 4: Elo ratings, relocated-team fix, and validation-based feature comparison
-- [x] Week 5: Move the feature and Elo code into a reusable Python module
-- [x] Week 5: Load the current season's completed games so ratings stay up to date
-- [ ] Build a FastAPI endpoint that returns win probabilities for an upcoming game
-- [ ] Build the React front end
+## Deployment
 
-## Limitations
+- **API:** Render web service. Build: `pip install -r requirements.txt && python -m src.train`. Start: `uvicorn src.api:app --host 0.0.0.0 --port $PORT`. Set `ALLOWED_ORIGINS` to the website's address.
+- **Site:** Render static site with root directory `frontend`, build `npm ci && npm run build`, publish `dist`, and `VITE_API_URL` set to the API's address.
+- **Python version** is pinned in `.python-version`, and Auto-Deploy is set to run only after CI passes.
+- **Refresh:** `.github/workflows/refresh.yml` calls a Render deploy hook (stored as the `RENDER_DEPLOY_HOOK_URL` secret) every Tuesday and Friday, which retrains on the newest games.
 
-- The model only sees game results. It knows nothing about injuries, quarterback changes, weather, or other information that affects real games, which limits how accurate it can get.
-- Accuracy is measured on about 855 test games, so small differences between models (a point or two) are within normal luck.
-- Playoff games are included in training and testing.
-- Data currently ends with the 2025 season.
+## What I learned
 
-## Data
+- **Leakage is the main way ML projects fool themselves.** Shifting features by one game and recording Elo before updating are tested explicitly.
+- **Split by time, and don't reuse the test set.** Walk-forward validation picked the features, and the test seasons were scored once.
+- **Overlapping features hide in plain sight.** Average margin is exactly points scored minus points allowed, so those weights can't be read individually. Explanations therefore group them into one reason.
+- **A clean environment finds bugs your laptop hides.** CI caught a missing dependency (`pyarrow`) that only existed on my machine.
+- **Measure calibration, not just accuracy.** A model can pick winners well and still give misleading percentages.
+- **Refactor with a safety net.** Moving notebook code into modules reproduced the exact same results (0.653 accuracy, 0.6291 log loss) before anything else changed.
 
-Game data comes from [nflverse](https://github.com/nflverse) through the `nflreadpy` package.
+## Ideas for next steps
+
+- Quarterback and injury information, and weather.
+- Tune the Elo settings with walk-forward validation, and try gradient-boosted trees.
+- Track the live accuracy over time on a chart.
+- Rate limiting and caching on the API.
+
+## License and credits
+
+MIT License. Game data from [nflverse](https://github.com/nflverse) via the `nflreadpy` package. This project is not affiliated with the NFL.
