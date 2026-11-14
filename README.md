@@ -5,7 +5,7 @@
 
 A full-stack machine learning app that predicts the winner of NFL games, explains *why*, and keeps score on its own accuracy. Python, scikit-learn, FastAPI, and React, with automated tests, CI, and a scheduled refresh that retrains on the newest results.
 
-**Live demo:** https://YOUR-SITE.onrender.com *(free hosting: the first load after a quiet period can take up to a minute while the server wakes up)*
+**Live demo:** https://nfl-predictor-web.onrender.com/ *(free hosting: the first load after a quiet period can take up to a minute while the server wakes up)*
 
 ![Matchup picker with a prediction and the reasons behind it](docs/matchup.png)
 
